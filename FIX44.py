@@ -249,4 +249,4 @@ def run():
 
 def calculate_spread(bid: str, ask: str):
     spread = Decimal(ask) - Decimal(bid)
-    return int(spread._int)
+    return int(spread.to_eng_string().replace('.', ''))
