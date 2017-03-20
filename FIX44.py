@@ -6,6 +6,7 @@ import asyncore
 import socket
 import logging
 import logging.handlers
+from decimal import Decimal
 
 
 PROTOCOL = 'FIX.4.4'
@@ -83,11 +84,11 @@ class Client(asyncore.dispatcher):
             log_file = 'messages_' + self.session.sender_id + '.log'
 
         logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=self.logging_level)
-        self.logger = logging.getLogger('fix-client')
+        self.logger = logging.getLogger('fix-client.' + self.session.sender_id)
 
-        log_handler = logging.handlers.TimedRotatingFileHandler(log_file, 'd', 1)
+        log_handler = logging.handlers.TimedRotatingFileHandler(log_file, 'h', 1)
         log_handler.setFormatter(logging.Formatter('%(asctime)s: %(message)s'))
-        self.message_logger = logging.getLogger('fix-messages')
+        self.message_logger = logging.getLogger('fix-messages.' + self.session.sender_id)
         self.message_logger.addHandler(log_handler)
         self.message_logger.info("\nNEW SESSION\n")
 
@@ -124,7 +125,7 @@ class Client(asyncore.dispatcher):
         self.close()
 
     def handle_read(self):
-        message_str = self.recv(8192).decode('ASCII')
+        message_str = self.recv(1048576).decode('ASCII')
 
         if len(message_str) == 0:
             self.logger.info(self.session.sender_id + ' disconnected.')
@@ -247,8 +248,5 @@ def run():
 
 
 def calculate_spread(bid: str, ask: str):
-    digits = max(len(ask), len(bid))
-    if bid.find('.') != -1 or ask.find('.') != -1:
-        digits -= 1
-    spread = int(ask.replace('.', '').ljust(digits, '0')) - int(bid.replace('.', '').ljust(digits, '0'))
-    return spread
+    spread = Decimal(ask) - Decimal(bid)
+    return int(spread._int)
