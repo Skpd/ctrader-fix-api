@@ -105,19 +105,15 @@ class Client(asyncore.dispatcher):
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connect(address)
 
-    @staticmethod
-    def run():
-        asyncore.loop(3)
-
     def add_handler(self, h_type, h_callback):
         if h_type not in self.handlers:
             self.handlers[h_type] = []
         self.handlers[h_type].append(h_callback)
 
     def send(self, data: BaseMessage):
-        self.logger.debug('Initiated request')
+        # self.logger.debug('Initiated request')
         result = asyncore.dispatcher.send(self, data=bytes(data))
-        self.logger.debug('Request complete, sent {0} bytes'.format(result))
+        # self.logger.debug('Request complete, sent {0} bytes'.format(result))
         self.message_logger.debug('OUT >>> ' + str(data).replace('\x01', '|'))
         return result
 
@@ -131,7 +127,7 @@ class Client(asyncore.dispatcher):
         message_str = self.recv(8192).decode('ASCII')
 
         if len(message_str) == 0:
-            self.logger.info('Disconnected')
+            self.logger.info(self.session.sender_id + ' disconnected.')
             return
 
         header = '8=' + PROTOCOL
@@ -146,7 +142,7 @@ class Client(asyncore.dispatcher):
             msg = header + msg
             self.message_logger.debug('IN <<< ' + msg.replace('\x01', '|'))
 
-            message = Message.from_string(msg)
+            message = Message.from_string(msg, self.session)
             handlers = self.get_message_handler(message)
 
             if handlers is not None:
@@ -168,7 +164,7 @@ class Client(asyncore.dispatcher):
 
     def logon_handler(self, message: BaseMessage):
         self.authorized = True
-        self.logger.info("Logged in at {0}".format(message.get_field(Field.SendingTime)))
+        self.logger.info("Logged in at {0} as {1}".format(message.get_field(Field.SendingTime), self.session.sender_id))
 
     def heartbeat_handler(self, message: BaseMessage):
         self.logger.debug(
@@ -244,6 +240,10 @@ class Client(asyncore.dispatcher):
             False,
             self.session
         ))
+
+
+def run():
+    asyncore.loop(3)
 
 
 def calculate_spread(bid: str, ask: str):

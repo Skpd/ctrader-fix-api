@@ -150,8 +150,8 @@ class Base:
         self.string = msg_str
 
 
-def from_string(string):
-    result = Base()
+def from_string(string, session=None):
+    result = Base(None, session)
     for pair in string.split(FIX44.SOH):
         if len(pair):
             values = pair.split('=')

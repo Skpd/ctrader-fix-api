@@ -13,7 +13,7 @@ def main():
     client = FIX44.Client(('ip.ad.dr.ess', 5201), 'login', 'password', session)
     client.add_handler(Message.Types.Logon, subscribe)
     client.add_handler(Message.Types.Heartbeat, funky_print)
-    client.run()
+    FIX44.run()
 
 
 def subscribe(message):
