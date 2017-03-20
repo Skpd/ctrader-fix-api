@@ -184,17 +184,17 @@ class Client(asyncore.dispatcher):
 
     def market_data_snapshot_handler(self, message: BaseMessage):
         prices = message.get_group(Field.Groups.MDEntry_Snapshot)
+
+        if len(prices) < 2:
+            self.logger.warn("No ask or bid in price update.")
+            return
+
         ask_idx = 1 if prices[0][Field.MDEntryType] == '0' else 0
         bid_idx = (ask_idx + 1) % 2 
-        digits = pow(10, max(
-            len(prices[ask_idx][Field.MDEntryPx][prices[ask_idx][Field.MDEntryPx].find('.') + 1:]), 
-            len(prices[bid_idx][Field.MDEntryPx][prices[bid_idx][Field.MDEntryPx].find('.') + 1:]),
-        ))
-        spread = int(
-            float(prices[ask_idx][Field.MDEntryPx]) * digits - float(prices[bid_idx][Field.MDEntryPx]) * digits
-        )
-        self.logger.info("Symbol: {0}, Server Time: {1}, BID: {2}, ASK: {3}, SPREAD: {4}".format(
-            Symbol.NAME[int(message.get_field(Field.Symbol))],
+        spread = calculate_spread(prices[bid_idx][Field.MDEntryPx], prices[ask_idx][Field.MDEntryPx])
+        name = Symbol.NAME[int(message.get_field(Field.Symbol))] if int(message.get_field(Field.Symbol)) in Symbol.NAME else int(message.get_field(Field.Symbol))
+        self.logger.info("Symbol: {0: <7}\tServer Time: {1}\tBID: {2: <10}\tASK: {3: <10}\tSPREAD: {4}".format(
+            name,
             message.get_field(Field.SendingTime),
             prices[bid_idx][Field.MDEntryPx],
             prices[ask_idx][Field.MDEntryPx],
@@ -204,16 +204,22 @@ class Client(asyncore.dispatcher):
     def market_data_refresh_handler(self, message: BaseMessage):
         results = message.get_group(Field.Groups.MDEntry_Refresh)
         actions = {'0': 'New', '2': 'Delete'}
-        self.logger.info(
-            "Price Update:\n\t\t\t"
-            "Symbol: {0}, Type: {1}, Price: {2}, Size: {3}, Action: {4}\n\t\t\t"
-            "Symbol: {5}, Type: {6}, Price: {7}, Size: {8}, Action: {9}".format(
-                Symbol.NAME[int(results[0][Field.Symbol])], results[0][Field.MDEntryID], results[0][Field.MDEntryPx],
-                results[0][Field.MDEntrySize], actions[results[0][Field.MDUpdateAction]],
-                Symbol.NAME[int(results[1][Field.Symbol])], results[1][Field.MDEntryID], results[1][Field.MDEntryPx],
-                results[1][Field.MDEntrySize], actions[results[1][Field.MDUpdateAction]]
-            )
-        )
+        types = {'0': 'BID', '1': 'ASK'}
+        
+        message = "Price Update:"
+        for r in results:
+            name = Symbol.NAME[int(r[Field.Symbol])] if int(r[Field.Symbol]) in Symbol.NAME else r[Field.Symbol]
+            if actions[r[Field.MDUpdateAction]] == 'New':
+                message += "\n\t\t\tSymbol: {0: <7}, Type: {5}, ID: {1}, Price: {2 <10}, Size: {3}, Action: {4}".format(
+                    name, r[Field.MDEntryID], r[Field.MDEntryPx], r[Field.MDEntrySize],
+                    actions[r[Field.MDUpdateAction]], types[r[Field.MDEntryType]]
+                )
+            else:
+                message += "\n\t\t\tSymbol: {0: <7}, ID: {1}, Action: {2}".format(
+                    name, r[Field.MDEntryID], actions[r[Field.MDUpdateAction]]
+                )
+        
+        self.logger.info(message)
 
     def logout_handler(self, message: BaseMessage):
         self.logger.critical('Logout reason: {0}'.format(message.get_field(Field.Text)))
@@ -238,3 +244,11 @@ class Client(asyncore.dispatcher):
             False,
             self.session
         ))
+
+
+def calculate_spread(bid: str, ask: str):
+    digits = max(len(ask), len(bid))
+    if bid.find('.') != -1 or ask.find('.') != -1:
+        digits -= 1
+    spread = int(ask.replace('.', '').ljust(digits, '0')) - int(bid.replace('.', '').ljust(digits, '0'))
+    return spread
