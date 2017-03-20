@@ -6,7 +6,6 @@ import asyncore
 import socket
 import logging
 import logging.handlers
-from decimal import Decimal
 
 
 PROTOCOL = 'FIX.4.4'
@@ -21,6 +20,8 @@ class Session:
         self.sender_sub = sender_sub
 
         self.__sequence_number = 0
+
+        self.symbol_table = Symbol.SETTINGS[sender_id.split('.')[0]]
 
     def next_sequence_number(self):
         self.__sequence_number += 1
@@ -109,7 +110,7 @@ class Client(asyncore.dispatcher):
     def add_handler(self, h_type, h_callback):
         if h_type not in self.handlers:
             self.handlers[h_type] = []
-        self.handlers[h_type].append(h_callback)
+        self.handlers[h_type].insert(0, h_callback)
 
     def send(self, data: BaseMessage):
         # self.logger.debug('Initiated request')
@@ -188,8 +189,12 @@ class Client(asyncore.dispatcher):
 
         ask_idx = 1 if prices[0][Field.MDEntryType] == '0' else 0
         bid_idx = (ask_idx + 1) % 2 
-        spread = calculate_spread(prices[bid_idx][Field.MDEntryPx], prices[ask_idx][Field.MDEntryPx])
-        name = Symbol.NAME[int(message.get_field(Field.Symbol))] if int(message.get_field(Field.Symbol)) in Symbol.NAME else int(message.get_field(Field.Symbol))
+        spread = calculate_spread(
+            prices[bid_idx][Field.MDEntryPx],
+            prices[ask_idx][Field.MDEntryPx],
+            self.session.symbol_table[int(message.get_field(Field.Symbol))]['pip_position']
+        )
+        name = self.session.symbol_table[int(message.get_field(Field.Symbol))]['name']
         self.logger.info("Symbol: {0: <7}\tServer Time: {1}\tBID: {2: <10}\tASK: {3: <10}\tSPREAD: {4}".format(
             name,
             message.get_field(Field.SendingTime),
@@ -205,15 +210,16 @@ class Client(asyncore.dispatcher):
         
         message = "Price Update:"
         for r in results:
-            name = Symbol.NAME[int(r[Field.Symbol])] if int(r[Field.Symbol]) in Symbol.NAME else r[Field.Symbol]
             if actions[r[Field.MDUpdateAction]] == 'New':
-                message += "\n\t\t\tSymbol: {0: <7}, Type: {5}, ID: {1}, Price: {2 <10}, Size: {3}, Action: {4}".format(
-                    name, r[Field.MDEntryID], r[Field.MDEntryPx], r[Field.MDEntrySize],
-                    actions[r[Field.MDUpdateAction]], types[r[Field.MDEntryType]]
-                )
+                if Field.MDEntryPx in r:
+                    name = self.session.symbol_table[int(r[Field.Symbol])]['name']
+                    message += "\n\t\t\tSymbol: {0: <7}, Type: {1}, ID: {2}, Price: {3: <10}, Size: {4}, Action: {5}".format(
+                        name, types[r[Field.MDEntryType]], r[Field.MDEntryID], r[Field.MDEntryPx], r[Field.MDEntrySize],
+                        actions[r[Field.MDUpdateAction]]
+                    )
             else:
                 message += "\n\t\t\tSymbol: {0: <7}, ID: {1}, Action: {2}".format(
-                    name, r[Field.MDEntryID], actions[r[Field.MDUpdateAction]]
+                    'none', r[Field.MDEntryID], actions[r[Field.MDUpdateAction]]
                 )
         
         self.logger.info(message)
@@ -247,6 +253,13 @@ def run():
     asyncore.loop(3)
 
 
-def calculate_spread(bid: str, ask: str):
-    spread = Decimal(ask) - Decimal(bid)
-    return int(spread.to_eng_string().replace('.', ''))
+def calculate_spread(bid: str, ask: str, pip_position: int) -> int:
+    spread = float(ask) - float(bid)
+    spread = '{:.{}f}'.format(spread, pip_position + 1)
+    return int(spread.replace('.', ''))
+
+
+def calculate_pip_value(price: str, size: int, pip_position: int) -> str:
+    pip = (pow(1 / 10, pip_position) * size) / float(price)
+    pip = '{:.5f}'.format(pip)
+    return pip
