@@ -81,13 +81,15 @@ class CreateOrder(BaseMessage):
             (Field.TransactTime, get_time()),
             (Field.OrderQty, 10000),
             (Field.OrdType, 1),
-            (Field.TimeInForce, 1),
+            (Field.TimeInForce, 3),
         ], session)
         self.msg_type = Message.Types.NewOrder
 
 
 class Client(asyncore.dispatcher):
     logging_level = logging.INFO
+    authorized = False
+    commission = 0.000030
 
     def __init__(self, address: tuple, user, password, session, log_file=None):
         asyncore.dispatcher.__init__(self)
@@ -95,7 +97,6 @@ class Client(asyncore.dispatcher):
         self.user = user
         self.password = password
 
-        self.authorized = False
         self.symbol_requests = []
         self.market_last_request = 1
 
@@ -138,7 +139,8 @@ class Client(asyncore.dispatcher):
         return result
 
     def handle_connect(self):
-        self.send(LogonMessage(self.user, self.password, 3, self.session))
+        if not self.authorized:
+            self.send(LogonMessage(self.user, self.password, 3, self.session))
 
     def handle_close(self):
         self.close()
@@ -164,6 +166,10 @@ class Client(asyncore.dispatcher):
 
             message = Message.from_string(msg, self.session)
             handlers = self.get_message_handler(message)
+
+            if message.get_field(Field.CheckSum) is None:
+                self.logger.critical("Incomplete message: {0}".format(message))
+                return
 
             if handlers is not None:
                 for h in handlers:
@@ -201,7 +207,7 @@ class Client(asyncore.dispatcher):
     def market_data_snapshot_handler(self, message: BaseMessage):
         prices = message.get_group(Field.Groups.MDEntry_Snapshot)
 
-        if len(prices) < 2:
+        if len(prices) < 2 or Field.MDEntryPx not in prices[0] or Field.MDEntryPx not in prices[1]:
             self.logger.warn("No ask or bid in price update.")
             return
 
@@ -281,6 +287,11 @@ def calculate_pip_value(price: str, size: int, pip_position: int) -> str:
     pip = (pow(1 / 10, pip_position) * size) / float(price)
     pip = '{:.5f}'.format(pip)
     return pip
+
+
+def calculate_commission(size=10000, rate=1, commission=0.000030):
+    # can't handle different size/rate for now
+    return (size * commission) * rate * 2
 
 
 def get_time():

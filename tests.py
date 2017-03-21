@@ -13,3 +13,6 @@ class TestCalculations(unittest.TestCase):
         self.assertEqual(FIX44.calculate_pip_value('19.00570', 100000, 4), '0.52616')
         self.assertEqual(FIX44.calculate_pip_value('1.3348', 100000, 4), '7.49176')
         self.assertEqual(FIX44.calculate_pip_value('112.585', 10000, 2), '0.88822')
+
+    def testCommission(self):
+        self.assertEqual(FIX44.calculate_commission(10000, 1, 0.000030), 0.6)
