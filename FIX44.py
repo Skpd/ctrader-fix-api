@@ -6,6 +6,7 @@ import asyncore
 import socket
 import logging
 import logging.handlers
+import datetime
 
 
 PROTOCOL = 'FIX.4.4'
@@ -21,7 +22,10 @@ class Session:
 
         self.__sequence_number = 0
 
-        self.symbol_table = Symbol.SETTINGS[sender_id.split('.')[0]]
+        if sender_id.split('.')[0] in Symbol.SETTINGS:
+            self.symbol_table = Symbol.SETTINGS[sender_id.split('.')[0]]
+        else:
+            self.symbol_table = Symbol.SETTINGS['default']
 
     def next_sequence_number(self):
         self.__sequence_number += 1
@@ -66,6 +70,20 @@ class MarketDataRequestMessage(BaseMessage):
             (Field.MDEntryType, 1),
         ], session)
         self.msg_type = Message.Types.MarketDataRequest
+
+
+class CreateOrder(BaseMessage):
+    def __init__(self, order_id, symbol, side, size, session=None):
+        BaseMessage.__init__(self, [
+            (Field.ClOrdID, order_id),
+            (Field.Symbol, symbol),
+            (Field.Side, side),
+            (Field.TransactTime, get_time()),
+            (Field.OrderQty, 10000),
+            (Field.OrdType, 1),
+            (Field.TimeInForce, 1),
+        ], session)
+        self.msg_type = Message.Types.NewOrder
 
 
 class Client(asyncore.dispatcher):
@@ -263,3 +281,7 @@ def calculate_pip_value(price: str, size: int, pip_position: int) -> str:
     pip = (pow(1 / 10, pip_position) * size) / float(price)
     pip = '{:.5f}'.format(pip)
     return pip
+
+
+def get_time():
+    return datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]

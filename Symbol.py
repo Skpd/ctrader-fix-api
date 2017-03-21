@@ -1,5 +1,5 @@
 SETTINGS = {
-    'fxpig': {
+    'default': {
         1: {'id': 1, 'pip_position': 4, 'name': 'EURUSD.spa'},
         2: {'id': 2, 'pip_position': 4, 'name': 'GBPUSD.spa'},
         3: {'id': 3, 'pip_position': 2, 'name': 'EURJPY.spa'},

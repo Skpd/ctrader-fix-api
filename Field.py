@@ -32,6 +32,16 @@ MDEntryPx = 270
 MDUpdateAction = 279
 MDEntryID = 278
 MDEntrySize = 271
+ClOrdID = 11
+Side = 54
+TransactTime = 60
+OrderQty = 38
+OrdType = 40
+Price = 44
+StopPx = 99
+TimeInForce = 59
+ExpireTime = 126
+PosMaintRptID = 721
 
 
 class Groups:

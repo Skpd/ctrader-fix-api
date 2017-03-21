@@ -1,6 +1,5 @@
 import Field
 import FIX44
-import datetime
 
 
 class Types:
@@ -118,7 +117,7 @@ class Base:
         header = [
             (Field.MsgSeqNum, self.current_session.next_sequence_number()),
             (Field.SenderCompID, self.current_session.sender_id),
-            (Field.SendingTime, datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]),
+            (Field.SendingTime, FIX44.get_time()),
             (Field.TargetCompID, self.current_session.target_id),
         ]
 
