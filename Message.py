@@ -149,11 +149,12 @@ class Base:
         self.string = msg_str
 
 
-def from_string(string, session=None):
+def from_string(string, session=None) -> Base:
     result = Base(None, session)
     for pair in string.split(FIX44.SOH):
         if len(pair):
             values = pair.split('=')
             if len(values) == 2:
                 result.set_field((values[0], values[1]))
+    result.string = string
     return result

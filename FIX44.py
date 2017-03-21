@@ -1,3 +1,5 @@
+from timeit import Timer
+
 import Field
 import Message
 from Message import Base as BaseMessage
@@ -131,7 +133,9 @@ class Client(asyncore.dispatcher):
             self.handlers[h_type] = []
         self.handlers[h_type].insert(0, h_callback)
 
-    def send(self, data: BaseMessage):
+    def send(self, data):
+        if not isinstance(data, BaseMessage):
+            data = bytes(data, 'ASCII')
         # self.logger.debug('Initiated request')
         result = asyncore.dispatcher.send(self, data=bytes(data))
         # self.logger.debug('Request complete, sent {0} bytes'.format(result))
@@ -146,7 +150,13 @@ class Client(asyncore.dispatcher):
         self.close()
 
     def handle_read(self):
-        message_str = self.recv(1048576).decode('ASCII')
+        t = Timer()
+        message_str = ''
+        while message_str[-7:][:3] != '10=' or message_str[-1:] != SOH:
+            try:
+                message_str += self.recv(65536).decode('ASCII')
+            except BlockingIOError:
+                continue
 
         if len(message_str) == 0:
             self.logger.info(self.session.sender_id + ' disconnected.')
@@ -158,22 +168,42 @@ class Client(asyncore.dispatcher):
             self.logger.warn('Unknown message: ' + message_str)
             return
 
+        self.message_logger.debug('IN <<< ' + message_str.replace('\x01', '|'))
+
         parts = message_str.split(header)[1:]
+        if len(parts) > 1:
+            self.logger.warning("Merge me")
+            messages = []
+            for msg in parts:
+                message = Message.from_string(header + msg, self.session)
+                messages.append(message)
+                for m in messages:
+                    if message.get_type() == m.get_type() \
+                            and message.get_type() == Message.Types.MarketDataSnapshot \
+                            and message.get_field(Field.Symbol) == m.get_field(Field.Symbol)\
+                            and m.get_field(Field.MsgSeqNum) != message.get_field(Field.MsgSeqNum):
+                        print('DROP')
+                        print(m)
+                        print(message)
+                        messages.remove(m)
+            for m in messages:
+                self.handle_message(m)
+        else:
+            message = Message.from_string(message_str, self.session)
+            self.handle_message(message)
 
-        for msg in parts:
-            msg = header + msg
-            self.message_logger.debug('IN <<< ' + msg.replace('\x01', '|'))
+        self.logger.debug("Message processing took: {0}".format(t.timeit()))
 
-            message = Message.from_string(msg, self.session)
-            handlers = self.get_message_handler(message)
+    def handle_message(self, message):
+        handlers = self.get_message_handler(message)
 
-            if message.get_field(Field.CheckSum) is None:
-                self.logger.critical("Incomplete message: {0}".format(message))
-                return
+        if message.get_field(Field.CheckSum) is None:
+            self.logger.critical("Incomplete message: {0}".format(message))
+            return
 
-            if handlers is not None:
-                for h in handlers:
-                    h(message)
+        if handlers is not None:
+            for h in handlers:
+                h(message)
 
     def get_message_handler(self, message: BaseMessage):
         if message.get_type() is None:
