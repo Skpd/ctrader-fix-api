@@ -42,6 +42,13 @@ StopPx = 99
 TimeInForce = 59
 ExpireTime = 126
 PosMaintRptID = 721
+OrderID = 37
+ExecType = 150
+OrdStatus = 39
+AvgPx = 6
+LeavesQty = 151
+CumQty = 14
+OrdRejReason = 103
 
 
 class Groups:
