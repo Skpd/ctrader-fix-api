@@ -89,7 +89,7 @@ class CreateOrder(BaseMessage):
 
 
 class CreateLimitOrder(BaseMessage):
-    def __init__(self, order_id, symbol, side, size, price, session=None):
+    def __init__(self, order_id, symbol, side, size, price, expiry, session=None):
         BaseMessage.__init__(self, [
             (Field.ClOrdID, order_id),
             (Field.Symbol, symbol),
@@ -98,7 +98,8 @@ class CreateLimitOrder(BaseMessage):
             (Field.OrderQty, size),
             (Field.OrdType, 2),
             (Field.Price, price),
-            (Field.TimeInForce, 1),
+            (Field.TimeInForce, 6),
+            (Field.ExpireTime, expiry)
         ], session)
         self.msg_type = Message.Types.NewOrder
 
@@ -339,5 +340,8 @@ def calculate_commission(size=10000, rate=1, commission=0.000030):
     return (size * commission) * rate * 2
 
 
-def get_time():
-    return datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
+def get_time(add_seconds=None):
+    if add_seconds:
+        return (datetime.datetime.utcnow() + datetime.timedelta(0, add_seconds)).strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
+    else:
+        return datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
