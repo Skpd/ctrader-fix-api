@@ -81,9 +81,24 @@ class CreateOrder(BaseMessage):
             (Field.Symbol, symbol),
             (Field.Side, side),
             (Field.TransactTime, get_time()),
-            (Field.OrderQty, 10000),
+            (Field.OrderQty, size),
             (Field.OrdType, 1),
             (Field.TimeInForce, 3),
+        ], session)
+        self.msg_type = Message.Types.NewOrder
+
+
+class CreateLimitOrder(BaseMessage):
+    def __init__(self, order_id, symbol, side, size, price, session=None):
+        BaseMessage.__init__(self, [
+            (Field.ClOrdID, order_id),
+            (Field.Symbol, symbol),
+            (Field.Side, side),
+            (Field.TransactTime, get_time()),
+            (Field.OrderQty, size),
+            (Field.OrdType, 2),
+            (Field.Price, price),
+            (Field.TimeInForce, 1),
         ], session)
         self.msg_type = Message.Types.NewOrder
 
