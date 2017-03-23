@@ -139,6 +139,7 @@ class Client(asyncore.dispatcher):
             Message.Types.MessageReject: [self.reject_handler],
             Message.Types.MarketDataSnapshot: [self.market_data_snapshot_handler],
             Message.Types.MarketDataRefresh: [self.market_data_refresh_handler],
+            Message.Types.ExecutionReport: [self.execution_report_handler],
         }
 
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -293,6 +294,14 @@ class Client(asyncore.dispatcher):
                 )
         
         self.logger.info(message)
+
+    def execution_report_handler(self, message: Message):
+        statuses = {'0': 'New', '1': 'Partial', '2': 'Filled', '4': 'Cancelled', '8': 'Rejected', 'C': 'Expired'}
+        self.logger.warning("ORDER {0} {1} status: {2}, Time: {3}. {4}".format(
+            message.get_field(Field.OrderID), message.get_field(Field.ClOrdID),
+            statuses[message.get_field(Field.OrdStatus)], message.get_field(Field.TransactTime),
+            message.get_field(Field.Text)
+        ))
 
     def logout_handler(self, message: BaseMessage):
         self.logger.critical('Logout reason: {0}'.format(message.get_field(Field.Text)))
