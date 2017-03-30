@@ -150,6 +150,9 @@ class Client(asyncore.dispatcher):
             self.handlers[h_type] = []
         self.handlers[h_type].insert(0, h_callback)
 
+    def set_handler(self, h_type, h_callback):
+        self.handlers[h_type] = [h_callback]
+
     def send(self, data):
         if not isinstance(data, BaseMessage):
             data = bytes(data, 'ASCII')
@@ -189,7 +192,6 @@ class Client(asyncore.dispatcher):
 
         parts = message_str.split(header)[1:]
         if len(parts) > 1:
-            self.logger.warning("Merge me")
             messages = []
             for msg in parts:
                 message = Message.from_string(header + msg, self.session)
@@ -266,12 +268,13 @@ class Client(asyncore.dispatcher):
             self.session.symbol_table[int(message.get_field(Field.Symbol))]['pip_position']
         )
         name = self.session.symbol_table[int(message.get_field(Field.Symbol))]['name']
-        self.logger.info("Symbol: {0: <7}\tServer Time: {1}\tBID: {2: <10}\tASK: {3: <10}\tSPREAD: {4}".format(
+        self.logger.info("Symbol: {0: <7}\tBID: {1: <10}\tASK: {2: <10}\tSPREAD: {3}\n\t\t\t\t\t\t\tBID_VOL: {4}\tASK_VOL: {5}".format(
             name,
-            message.get_field(Field.SendingTime),
             prices[bid_idx][Field.MDEntryPx],
             prices[ask_idx][Field.MDEntryPx],
-            spread
+            spread,
+            int(self.session.symbol_table[int(message.get_field(Field.Symbol))]['bid_volume'] / 1000000),
+            int(self.session.symbol_table[int(message.get_field(Field.Symbol))]['ask_volume'] / 1000000),
         ))
 
     def market_data_refresh_handler(self, message: BaseMessage):
