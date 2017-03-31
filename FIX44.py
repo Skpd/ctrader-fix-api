@@ -268,7 +268,7 @@ class Client(asyncore.dispatcher):
             self.session.symbol_table[int(message.get_field(Field.Symbol))]['pip_position']
         )
         name = self.session.symbol_table[int(message.get_field(Field.Symbol))]['name']
-        self.logger.info("Symbol: {0: <7}\tBID: {1: <10}\tASK: {2: <10}\tSPREAD: {3}\n\t\t\t\t\t\t\tBID_VOL: {4}\tASK_VOL: {5}".format(
+        self.logger.info("Symbol: {0: <7}\tBID: {1: <10}\tASK: {2: <10}\tSPREAD: {3}\t\tBID_VOL: {4}\tASK_VOL: {5}".format(
             name,
             prices[bid_idx][Field.MDEntryPx],
             prices[ask_idx][Field.MDEntryPx],
