@@ -142,6 +142,7 @@ class Client(asyncore.dispatcher):
             Message.Types.ExecutionReport: [self.execution_report_handler],
         }
 
+        self.buffer = ''
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connect(address)
 
@@ -154,13 +155,22 @@ class Client(asyncore.dispatcher):
         self.handlers[h_type] = [h_callback]
 
     def send(self, data):
+        if data is None:
+            return
+
         if not isinstance(data, BaseMessage):
             data = bytes(data, 'ASCII')
-        # self.logger.debug('Initiated request')
-        result = asyncore.dispatcher.send(self, data=bytes(data))
-        # self.logger.debug('Request complete, sent {0} bytes'.format(result))
+
+        sent = 0
+        while sent < len(data):
+            sent_m = asyncore.dispatcher.send(self, bytes(data)[sent:])
+            if sent_m is None:
+                return
+            else:
+                sent += sent_m
+
         self.message_logger.debug('OUT >>> ' + str(data).replace('\x01', '|'))
-        return result
+        return sent
 
     def handle_connect(self):
         if not self.authorized:
@@ -170,48 +180,22 @@ class Client(asyncore.dispatcher):
         self.close()
 
     def handle_read(self):
-        t = Timer()
-        message_str = ''
-        while message_str[-7:][:3] != '10=' or message_str[-1:] != SOH:
-            try:
-                message_str += self.recv(65536).decode('ASCII')
-            except BlockingIOError:
-                continue
+        self.buffer += self.recv(2048).decode('ASCII')
 
-        if len(message_str) == 0:
+        if len(self.buffer) == 0:
             self.logger.info(self.session.sender_id + ' disconnected.')
+            self.close()
             return
 
-        header = '8=' + PROTOCOL
+        while True:
+            checksum_point = self.buffer.find(SOH + '10=')
 
-        if message_str.find(header) == -1:
-            self.logger.warn('Unknown message: ' + message_str)
-            return
+            if len(self.buffer) == 0 or checksum_point == -1 or self.buffer[checksum_point + 7:][:1] != SOH:
+                break
 
-        self.message_logger.debug('IN <<< ' + message_str.replace('\x01', '|'))
-
-        parts = message_str.split(header)[1:]
-        if len(parts) > 1:
-            messages = []
-            for msg in parts:
-                message = Message.from_string(header + msg, self.session)
-                messages.append(message)
-                for m in messages:
-                    if message.get_type() == m.get_type() \
-                            and message.get_type() == Message.Types.MarketDataSnapshot \
-                            and message.get_field(Field.Symbol) == m.get_field(Field.Symbol)\
-                            and m.get_field(Field.MsgSeqNum) != message.get_field(Field.MsgSeqNum):
-                        print('DROP')
-                        print(m)
-                        print(message)
-                        messages.remove(m)
-            for m in messages:
-                self.handle_message(m)
-        else:
-            message = Message.from_string(message_str, self.session)
+            message = Message.from_string(self.buffer[:checksum_point + 8], self.session)
             self.handle_message(message)
-
-        self.logger.debug("Message processing took: {0}".format(t.timeit()))
+            self.buffer = self.buffer[checksum_point + 8:]
 
     def handle_message(self, message):
         handlers = self.get_message_handler(message)
