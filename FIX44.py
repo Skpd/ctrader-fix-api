@@ -1,5 +1,3 @@
-from timeit import Timer
-
 import Field
 import Message
 from Message import Base as BaseMessage
@@ -9,6 +7,7 @@ import socket
 import logging
 import logging.handlers
 import datetime
+import sys
 
 
 PROTOCOL = 'FIX.4.4'
@@ -196,7 +195,7 @@ class Client(asyncore.dispatcher):
         if len(self.buffer) == 0:
             self.logger.info(self.session.sender_id + ' disconnected.')
             self.close()
-            self.do_connect()
+            sys.exit(1)
             return
 
         while True:
