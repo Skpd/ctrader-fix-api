@@ -33,6 +33,9 @@ class Session:
         self.__sequence_number += 1
         return self.__sequence_number
 
+    def reset_sequence(self):
+        self.__sequence_number = 0
+
 
 class LogonMessage(BaseMessage):
     def __init__(self, username, password, heartbeat=3, session=None):
@@ -108,12 +111,15 @@ class Client(asyncore.dispatcher):
     logging_level = logging.INFO
     authorized = False
     commission = 0.000030
+    buffer = ''
+    address = None
 
     def __init__(self, address: tuple, user, password, session, log_file=None):
         asyncore.dispatcher.__init__(self)
         self.session = session
         self.user = user
         self.password = password
+        self.address = address
 
         self.symbol_requests = []
         self.market_last_request = 1
@@ -142,9 +148,14 @@ class Client(asyncore.dispatcher):
             Message.Types.ExecutionReport: [self.execution_report_handler],
         }
 
+        self.do_connect()
+
+    def do_connect(self):
+        self.session.reset_sequence()
+        self.authorized = False
         self.buffer = ''
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connect(address)
+        self.connect(self.address)
 
     def add_handler(self, h_type, h_callback):
         if h_type not in self.handlers:
@@ -185,6 +196,7 @@ class Client(asyncore.dispatcher):
         if len(self.buffer) == 0:
             self.logger.info(self.session.sender_id + ' disconnected.')
             self.close()
+            self.do_connect()
             return
 
         while True:
