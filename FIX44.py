@@ -196,7 +196,6 @@ class Client(asyncore.dispatcher):
             self.logger.info(self.session.sender_id + ' disconnected.')
             self.close()
             sys.exit(1)
-            return
 
         while True:
             checksum_point = self.buffer.find(SOH + '10=')
@@ -221,12 +220,12 @@ class Client(asyncore.dispatcher):
 
     def get_message_handler(self, message: BaseMessage):
         if message.get_type() is None:
-            self.logger.warn("Can't handle message: can't find message type")
+            self.logger.warning("Can't handle message: can't find message type")
             return None
         elif message.get_type() in self.handlers:
             return self.handlers[message.get_type()]
         else:
-            self.logger.warn("Can't handle message: handler {0} not registered".format(message.get_type()))
+            self.logger.warning("Can't handle message: handler {0} not registered".format(message.get_type()))
             return None
 
     def writable(self):
@@ -246,13 +245,13 @@ class Client(asyncore.dispatcher):
         self.send(TestResponseMessage(message.get_field(Field.TestReqID), self.session))
 
     def reject_handler(self, message: BaseMessage):
-        self.logger.warn("MESSAGE REJECTED: {0}".format(message.get_field(Field.Text)))
+        self.logger.warning("MESSAGE REJECTED: {0}".format(message.get_field(Field.Text)))
 
     def market_data_snapshot_handler(self, message: BaseMessage):
         prices = message.get_group(Field.Groups.MDEntry_Snapshot)
 
         if len(prices) < 2 or Field.MDEntryPx not in prices[0] or Field.MDEntryPx not in prices[1]:
-            self.logger.warn("No ask or bid in price update.")
+            self.logger.warning("No ask or bid in price update.")
             return
 
         ask_idx = 1 if prices[0][Field.MDEntryType] == '0' else 0
@@ -282,10 +281,11 @@ class Client(asyncore.dispatcher):
             if actions[r[Field.MDUpdateAction]] == 'New':
                 if Field.MDEntryPx in r:
                     name = self.session.symbol_table[int(r[Field.Symbol])]['name']
-                    message += "\n\t\t\tSymbol: {0: <7}, Type: {1}, ID: {2}, Price: {3: <10}, Size: {4}, Action: {5}".format(
-                        name, types[r[Field.MDEntryType]], r[Field.MDEntryID], r[Field.MDEntryPx], r[Field.MDEntrySize],
-                        actions[r[Field.MDUpdateAction]]
-                    )
+                    message += "\n\t\t\tSymbol: {0: <7}, Type: {1}, ID: {2}, Price: {3: <10}, Size: {4}, Action: {5}"\
+                        .format(
+                            name, types[r[Field.MDEntryType]], r[Field.MDEntryID], r[Field.MDEntryPx],
+                            r[Field.MDEntrySize], actions[r[Field.MDUpdateAction]]
+                        )
             else:
                 message += "\n\t\t\tSymbol: {0: <7}, ID: {1}, Action: {2}".format(
                     'none', r[Field.MDEntryID], actions[r[Field.MDUpdateAction]]
@@ -314,7 +314,7 @@ class Client(asyncore.dispatcher):
         try:
             symbol_idx = next(i for (i, d) in enumerate(self.symbol_requests) if d['symbol'] == symbol_id)
         except StopIteration:
-            self.logger.warn("Can't find subscription for symbol {0}".format(Symbol.NAME[symbol_id]))
+            self.logger.warning("Can't find subscription for symbol {0}".format(symbol_id))
             return
 
         self.send(MarketDataRequestMessage(
