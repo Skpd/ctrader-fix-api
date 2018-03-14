@@ -8,7 +8,7 @@ See example/client.py for v0.1 version
 * ./venv/bin/pip install -r requirements.txt
 
 # Usage
-``
+```
 usage: client.py [-h] [--version] -b BROKER -u USERNAME -p PASSWORD -s SERVER
                  [-v] [-t MAX_THREADS]
 
@@ -31,4 +31,4 @@ optional arguments:
                         Thread limit in thread pool. Default to symbol table
                         length.
 
-``
+```
