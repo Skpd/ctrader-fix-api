@@ -49,6 +49,8 @@ AvgPx = 6
 LeavesQty = 151
 CumQty = 14
 OrdRejReason = 103
+BuySide = 1
+SellSide = 2
 
 
 class Groups:

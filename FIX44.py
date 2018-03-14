@@ -15,7 +15,9 @@ SOH = chr(1)
 
 
 class Session:
-    def __init__(self, sender_id: str, target_id: str, target_sub=None, sender_sub=None):
+    def __init__(self, sender_id: str, target_id: str, target_sub=None, sender_sub=None, username=None, password=None):
+        self.password = password
+        self.username = username
         self.sender_id = sender_id
         self.target_sub = target_sub
         self.target_id = target_id
@@ -255,7 +257,7 @@ class Client(asyncore.dispatcher):
             return
 
         ask_idx = 1 if prices[0][Field.MDEntryType] == '0' else 0
-        bid_idx = (ask_idx + 1) % 2 
+        bid_idx = (ask_idx + 1) % 2
         spread = calculate_spread(
             prices[bid_idx][Field.MDEntryPx],
             prices[ask_idx][Field.MDEntryPx],
@@ -275,7 +277,7 @@ class Client(asyncore.dispatcher):
         results = message.get_group(Field.Groups.MDEntry_Refresh)
         actions = {'0': 'New', '2': 'Delete'}
         types = {'0': 'BID', '1': 'ASK'}
-        
+
         message = "Price Update:"
         for r in results:
             if actions[r[Field.MDUpdateAction]] == 'New':
@@ -290,7 +292,7 @@ class Client(asyncore.dispatcher):
                 message += "\n\t\t\tSymbol: {0: <7}, ID: {1}, Action: {2}".format(
                     'none', r[Field.MDEntryID], actions[r[Field.MDUpdateAction]]
                 )
-        
+
         self.logger.info(message)
 
     def execution_report_handler(self, message: Message):
