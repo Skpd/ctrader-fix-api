@@ -15,6 +15,7 @@ class Client:
     loop = None
     executor = None
     buffer = b''
+    handlers = {}
 
     def __init__(self, loop, username, password, broker=None, max_threads=None):
         self.session = Session(
@@ -32,6 +33,12 @@ class Client:
             format='%(asctime)s %(threadName)s %(levelname)s: %(message)s'
         )
         self.logger = logging.getLogger('fix-client.' + self.session.sender_id)
+        self.handlers = {
+            Message.Types.Logon: [self.on_logon],
+            Message.Types.Heartbeat: [self.on_heartbeat],
+            Message.Types.MarketDataSnapshot: [self.on_market_data],
+            Message.Types.TestRequest: [self.on_test]
+        }
 
     async def connect(self, host=None, port=None):
         logging.info('Connecting ')
@@ -85,14 +92,14 @@ class Client:
 
         message = Message.from_string(buffer.decode(), self.session)
 
-        if message.get_type() == Message.Types.Heartbeat:
-            self.on_heartbeat()
-        elif message.get_type() == Message.Types.Logon:
-            self.on_logon()
-        elif message.get_type() == Message.Types.TestRequest:
-            self.on_test(message)
-        elif message.get_type() == Message.Types.MarketDataSnapshot:
-            self.on_market_data(message)
+        if message.get_type() in self.handlers:
+            if type(self.handlers[message.get_type()]) is not list:
+                self.handlers[message.get_type()] = [self.handlers[message.get_type()]]
+
+            for handler in self.handlers[message.get_type()]:
+                handler(message)
+        else:
+            self.logger.warning('No handler for message type "{}"'.format(message.get_type()))
 
     def feed(self, data):
         self.buffer += data
