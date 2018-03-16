@@ -93,7 +93,7 @@ class Client:
 
             for handler in self.handlers[msg.get_type()]:
                 self.logger.debug('Executing {} for message type {}'.format(handler.__name__, msg.get_type()))
-                self.loop.call_soon_threadsafe(handler, msg)
+                handler(msg)
                 self.logger.debug('{} done'.format(handler.__name__))
         else:
             self.logger.warning('No handler for message type "{}"'.format(msg.get_type()))
@@ -105,7 +105,6 @@ class Client:
         if header == b'10':
             self.logger.debug('Submitting task to execute')
             self.loop.call_soon_threadsafe(self.executor.submit, self.process, self.buffer)
-            # f = self.executor.submit(self.process, self.buffer)
             self.logger.debug('Submitted')
             self.buffer = b''
 
