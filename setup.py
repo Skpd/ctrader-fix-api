@@ -1,9 +1,9 @@
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 setup(
     name='ctfix',
-    packages=['ctfix'],  # this must be the same as the name above
-    version='0.21',
+    packages=find_packages(),  # this must be the same as the name above
+    version='0.211',
     description='Ctrader FIX API',
     author='Dmitry Shabanov',
     author_email='dm.skpd@gmail.com',
