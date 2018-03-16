@@ -1,6 +1,9 @@
 .idea
 venv
+
 build
+setup.cfg
+ctfix.egg-info
 
 *.log
 main.py

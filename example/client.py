@@ -1,17 +1,17 @@
 import logging
-import sys, os; sys.path.insert(0, os.path.abspath('..'))
-from ..ctfix.client.asyncore import Client as AsyncoreClient
-from ..ctfix import message
-from ..ctfix.session import Session
+import sys
+from ctfix.client.asyncore import Client as AsyncoreClient
+from ctfix.message import Message
+from ctfix.session import Session
 
 
 def main():
     global client
     session = Session('sender.id', 'CSERVER', 'QUOTE')
-    message.Base.default_session = session
+    Message.default_session = session
     client = AsyncoreClient(('ip.ad.dr.ess', 5201), 'login', 'password', session)
-    client.add_handler(message.Types.Logon, subscribe)
-    client.add_handler(message.Types.Heartbeat, funky_print)
+    client.add_handler(Message.TYPES.Logon, subscribe)
+    client.add_handler(Message.TYPES.Heartbeat, funky_print)
     AsyncoreClient.run()
 
 

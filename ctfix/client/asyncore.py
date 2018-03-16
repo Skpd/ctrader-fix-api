@@ -3,9 +3,8 @@ import socket
 import asyncore
 import logging
 import logging.handlers
-from ctfix.message import Types, from_string, Base as BaseMessage
-from ctfix.fix44 import SOH, calculate_spread, \
-    LogonMessage, HeartbeatMessage, MarketDataRequestMessage, TestResponseMessage
+from ctfix.message import Message, LogonMessage, HeartbeatMessage, TestResponseMessage, MarketDataRequestMessage
+from ctfix.math import calculate_spread
 from ctfix.field import *
 
 
@@ -39,15 +38,15 @@ class Client(asyncore.dispatcher):
         self.message_logger.info("\nNEW SESSION\n")
 
         self.handlers = {
-            Types.Logon: [self.logon_handler],
-            Types.Logout: [self.logout_handler],
-            Types.Heartbeat: [self.heartbeat_handler],
-            Types.TestRequest: [self.test_request_handled],
-            Types.Reject: [self.reject_handler],
-            Types.MessageReject: [self.reject_handler],
-            Types.MarketDataSnapshot: [self.market_data_snapshot_handler],
-            Types.MarketDataRefresh: [self.market_data_refresh_handler],
-            Types.ExecutionReport: [self.execution_report_handler],
+            Message.TYPES.Logon: [self.logon_handler],
+            Message.TYPES.Logout: [self.logout_handler],
+            Message.TYPES.Heartbeat: [self.heartbeat_handler],
+            Message.TYPES.TestRequest: [self.test_request_handled],
+            Message.TYPES.Reject: [self.reject_handler],
+            Message.TYPES.MessageReject: [self.reject_handler],
+            Message.TYPES.MarketDataSnapshot: [self.market_data_snapshot_handler],
+            Message.TYPES.MarketDataRefresh: [self.market_data_refresh_handler],
+            Message.TYPES.ExecutionReport: [self.execution_report_handler],
         }
 
         self.do_connect()
@@ -71,7 +70,7 @@ class Client(asyncore.dispatcher):
         if data is None:
             return
 
-        if not isinstance(data, BaseMessage):
+        if not isinstance(data, Message):
             data = bytes(data, 'ASCII')
 
         sent = 0
@@ -101,12 +100,12 @@ class Client(asyncore.dispatcher):
             sys.exit(1)
 
         while True:
-            checksum_point = self.buffer.find(SOH + '10=')
+            checksum_point = self.buffer.find(SEPARATOR + '10=')
 
-            if len(self.buffer) == 0 or checksum_point == -1 or self.buffer[checksum_point + 7:][:1] != SOH:
+            if len(self.buffer) == 0 or checksum_point == -1 or self.buffer[checksum_point + 7:][:1] != SEPARATOR:
                 break
 
-            message = from_string(self.buffer[:checksum_point + 8], self.session)
+            message = Message.from_string(self.buffer[:checksum_point + 8], self.session)
             self.handle_message(message)
             self.buffer = self.buffer[checksum_point + 8:]
 
@@ -121,7 +120,7 @@ class Client(asyncore.dispatcher):
             for h in handlers:
                 h(message)
 
-    def get_message_handler(self, message: BaseMessage):
+    def get_message_handler(self, message: Message):
         if message.get_type() is None:
             self.logger.warning("Can't handle message: can't find message type")
             return None
@@ -134,23 +133,23 @@ class Client(asyncore.dispatcher):
     def writable(self):
         return self.connecting
 
-    def logon_handler(self, message: BaseMessage):
+    def logon_handler(self, message: Message):
         self.authorized = True
         self.logger.info("Logged in at {0} as {1}".format(message.get_field(SendingTime), self.session.sender_id))
 
-    def heartbeat_handler(self, message: BaseMessage):
+    def heartbeat_handler(self, message: Message):
         self.logger.debug(
             "Received heartbeat, sending it back. Server time: {0}.".format(message.get_field(SendingTime))
         )
         self.send(HeartbeatMessage(self.session))
 
-    def test_request_handled(self, message: BaseMessage):
+    def test_request_handled(self, message: Message):
         self.send(TestResponseMessage(message.get_field(TestReqID), self.session))
 
-    def reject_handler(self, message: BaseMessage):
+    def reject_handler(self, message: Message):
         self.logger.warning("MESSAGE REJECTED: {0}".format(message.get_field(Text)))
 
-    def market_data_snapshot_handler(self, message: BaseMessage):
+    def market_data_snapshot_handler(self, message: Message):
         prices = message.get_group(Groups.MDEntry_Snapshot)
 
         if len(prices) < 2 or MDEntryPx not in prices[0] or MDEntryPx not in prices[1]:
@@ -176,7 +175,7 @@ class Client(asyncore.dispatcher):
             )
         )
 
-    def market_data_refresh_handler(self, message: BaseMessage):
+    def market_data_refresh_handler(self, message: Message):
         results = message.get_group(Groups.MDEntry_Refresh)
         actions = {'0': 'New', '2': 'Delete'}
         types = {'0': 'BID', '1': 'ASK'}
@@ -198,7 +197,7 @@ class Client(asyncore.dispatcher):
 
         self.logger.info(message)
 
-    def execution_report_handler(self, message: BaseMessage):
+    def execution_report_handler(self, message: Message):
         statuses = {'0': 'New', '1': 'Partial', '2': 'Filled', '4': 'Cancelled', '8': 'Rejected', 'C': 'Expired'}
         self.logger.warning("ORDER {0} {1} status: {2}, Time: {3}. {4}".format(
             message.get_field(OrderID), message.get_field(ClOrdID),
@@ -206,7 +205,7 @@ class Client(asyncore.dispatcher):
             message.get_field(Text)
         ))
 
-    def logout_handler(self, message: BaseMessage):
+    def logout_handler(self, message: Message):
         self.logger.critical('Logout reason: {0}'.format(message.get_field(Text)))
         self.close()
 

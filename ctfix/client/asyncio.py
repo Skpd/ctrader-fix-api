@@ -1,11 +1,10 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
-from ctfix import message
-from ctfix import field
 from ctfix.session import Session
-from ctfix.fix44 import TestResponseMessage, MarketDataRequestMessage, HeartbeatMessage, LogonMessage, SOH
-from ctfix.fix44 import calculate_spread
+from ctfix.message import Message, LogonMessage, HeartbeatMessage, TestResponseMessage, MarketDataRequestMessage
+from ctfix.math import calculate_spread
+from ctfix import field
 
 
 class Client:
@@ -35,14 +34,14 @@ class Client:
         )
         self.logger = logging.getLogger('fix-client.' + self.session.sender_id)
         self.handlers = {
-            message.Types.Logon: [self.on_logon],
-            message.Types.Heartbeat: [self.on_heartbeat],
-            message.Types.MarketDataSnapshot: [self.on_market_data],
-            message.Types.TestRequest: [self.on_test]
+            Message.TYPES.Logon: [self.on_logon],
+            Message.TYPES.Heartbeat: [self.on_heartbeat],
+            Message.TYPES.MarketDataSnapshot: [self.on_market_data],
+            Message.TYPES.TestRequest: [self.on_test]
         }
 
     async def connect(self, host=None, port=None):
-        logging.info('Connecting ')
+        self.logger.info('Connecting ')
         self.writer = None
         self.reader = None
         self.buffer = b''
@@ -51,24 +50,19 @@ class Client:
         self.on_connect()
 
     def on_connect(self):
-        logging.info('Connected')
+        self.logger.info('Connected')
         self.write(LogonMessage(self.session.username, self.session.password, 3, self.session))
 
-    def on_logon(self):
-        logging.critical('Signed in as {}'.format(self.session.sender_id))
-        # subscribe to all symbols
-        for symbol_id, symbol in self.session.symbol_table.items():
-            self.write(MarketDataRequestMessage(
-                symbol=symbol_id, request_id=symbol_id, session=self.session, refresh=False
-            ))
+    def on_logon(self, msg: Message):
+        self.logger.critical('Signed in as {}'.format(self.session.sender_id))
 
-    def on_test(self, msg: message.Base):
+    def on_test(self, msg: Message):
         self.write(TestResponseMessage(msg.get_field(field.TestReqID), self.session))
 
-    def on_heartbeat(self):
+    def on_heartbeat(self, msg: Message):
         self.write(HeartbeatMessage(self.session))
 
-    def on_market_data(self, msg: message.Base):
+    def on_market_data(self, msg: Message):
         prices = msg.get_group(field.Groups.MDEntry_Snapshot)
 
         if len(prices) < 2 or field.MDEntryPx not in prices[0] or field.MDEntryPx not in prices[1]:
@@ -89,16 +83,18 @@ class Client:
         ))
 
     def process(self, buffer):
-        self.logger.debug('<<< IN {}'.format(buffer))
+        self.logger.debug('<<< IN {}'.format(buffer.decode().split(field.SEPARATOR)))
 
-        msg = message.from_string(buffer.decode(), self.session)
+        msg = Message.from_string(buffer.decode(), self.session)
 
         if msg.get_type() in self.handlers:
             if type(self.handlers[msg.get_type()]) is not list:
                 self.handlers[msg.get_type()] = [self.handlers[msg.get_type()]]
 
             for handler in self.handlers[msg.get_type()]:
-                handler(message)
+                self.logger.debug('Executing {} for message type {}'.format(handler.__name__, msg.get_type()))
+                self.loop.call_soon_threadsafe(handler, msg)
+                self.logger.debug('{} done'.format(handler.__name__))
         else:
             self.logger.warning('No handler for message type "{}"'.format(msg.get_type()))
 
@@ -108,11 +104,12 @@ class Client:
         header, value = data.split(b'=')
         if header == b'10':
             self.logger.debug('Submitting task to execute')
-            self.executor.submit(self.process, self.buffer)
+            self.loop.call_soon_threadsafe(self.executor.submit, self.process, self.buffer)
+            # f = self.executor.submit(self.process, self.buffer)
             self.logger.debug('Submitted')
             self.buffer = b''
 
-    def write(self, msg: message.Base):
+    def write(self, msg: Message):
         self.logger.debug('>>> OUT {}'.format(bytes(msg)))
         self.loop.call_soon_threadsafe(self.writer.write, bytes(msg))
 
@@ -121,7 +118,7 @@ class Client:
 
         while self.loop.is_running():
             try:
-                data = await self.reader.readuntil(bytes(SOH, 'ASCII'))
+                data = await self.reader.readuntil(bytes(field.SEPARATOR, 'ASCII'))
                 self.feed(data)
             except asyncio.streams.IncompleteReadError:
                 self.logger.critical('!Disconnected!')

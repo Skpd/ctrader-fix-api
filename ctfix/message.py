@@ -1,36 +1,28 @@
-import ctfix.fix44
+import datetime
 import ctfix.field
 
 
-class Types:
-    Logon = 'A'
-    Heartbeat = '0'
-    TestRequest = '1'
-    Logout = '5'
-    ResendRequest = '2'
-    Reject = '3'
-    SequenceReset = '4'
-    MarketDataRequest = 'V'
-    MarketDataSnapshot = 'W'
-    MarketDataRefresh = 'X'
-    NewOrder = 'D'
-    OrderStatus = 'H'
-    ExecutionReport = '8'
-    MessageReject = 'j'
-    PositionRequest = 'AN'
-    PositionReport = 'AP'
+class Message:
+    PROTOCOL = 'FIX.4.4'
 
+    class TYPES:
+        Logon = 'A'
+        Heartbeat = '0'
+        TestRequest = '1'
+        Logout = '5'
+        ResendRequest = '2'
+        Reject = '3'
+        SequenceReset = '4'
+        MarketDataRequest = 'V'
+        MarketDataSnapshot = 'W'
+        MarketDataRefresh = 'X'
+        NewOrder = 'D'
+        OrderStatus = 'H'
+        ExecutionReport = '8'
+        MessageReject = 'j'
+        PositionRequest = 'AN'
+        PositionReport = 'AP'
 
-def build_checksum(message: str):
-    checksum = sum([ord(i) for i in list(message)]) % 256
-    return make_pair((10, str(checksum).zfill(3)))
-
-
-def make_pair(pair: tuple):
-    return str(pair[0]) + "=" + str(pair[1]) + ctfix.fix44.SOH
-
-
-class Base:
     default_session = None
     current_session = None
 
@@ -117,7 +109,7 @@ class Base:
         header = [
             (ctfix.field.MsgSeqNum, self.current_session.next_sequence_number()),
             (ctfix.field.SenderCompID, self.current_session.sender_id),
-            (ctfix.field.SendingTime, ctfix.fix44.get_time()),
+            (ctfix.field.SendingTime, self.get_time()),
             (ctfix.field.TargetCompID, self.current_session.target_id),
         ]
 
@@ -134,27 +126,113 @@ class Base:
 
         body = ''
         for pair in sorted(header):
-            body += make_pair(pair)
+            body += self.make_pair(pair)
         for pair in self.fields:
-            body += make_pair(pair)
+            body += Message.make_pair(pair)
 
         self.length += len(body)
 
-        msg_str = make_pair((ctfix.field.BeginString, ctfix.fix44.PROTOCOL))
-        msg_str += make_pair((ctfix.field.BodyLength, self.length))
-        msg_str += make_pair((ctfix.field.MsgType, self.msg_type))
+        msg_str = self.make_pair((ctfix.field.BeginString, Message.PROTOCOL))
+        msg_str += self.make_pair((ctfix.field.BodyLength, self.length))
+        msg_str += self.make_pair((ctfix.field.MsgType, self.msg_type))
         msg_str += body
-        msg_str += build_checksum(msg_str)
+        msg_str += self.build_checksum(msg_str)
 
         self.string = msg_str
 
+    @staticmethod
+    def get_time(add_seconds=None):
+        if add_seconds:
+            return (datetime.datetime.utcnow() + datetime.timedelta(0, add_seconds)).strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
+        else:
+            return datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
 
-def from_string(string, session=None) -> Base:
-    result = Base([], session)
-    for pair in string.split(ctfix.fix44.SOH):
-        if len(pair):
-            values = pair.split('=')
-            if len(values) == 2:
-                result.set_field((values[0], values[1]))
-    result.string = string
-    return result
+    @staticmethod
+    def make_pair(pair: tuple):
+        return str(pair[0]) + "=" + str(pair[1]) + ctfix.field.SEPARATOR
+
+    @classmethod
+    def build_checksum(cls, message: str):
+        checksum = sum([ord(i) for i in list(message)]) % 256
+        return cls.make_pair((10, str(checksum).zfill(3)))
+
+    @classmethod
+    def from_string(cls, string, session=None):
+        result = cls([], session)
+        for pair in string.split(ctfix.field.SEPARATOR):
+            if len(pair):
+                values = pair.split('=')
+                if len(values) == 2:
+                    result.set_field((values[0], values[1]))
+        result.string = string
+        return result
+
+
+class LogonMessage(Message):
+    def __init__(self, username, password, heartbeat=3, session=None):
+        super().__init__([
+            (ctfix.field.EncryptMethod, 0),
+            (ctfix.field.HeartBtInt, heartbeat),
+            (ctfix.field.ResetSeqNum, 'Y'),
+            (ctfix.field.Username, username),
+            (ctfix.field.Password, password)
+        ], session)
+        self.msg_type = Message.TYPES.Logon
+
+
+class HeartbeatMessage(Message):
+    def __init__(self, session=None):
+        super().__init__([], session)
+        self.msg_type = Message.TYPES.Heartbeat
+
+
+class TestResponseMessage(Message):
+    def __init__(self, text, session=None):
+        super().__init__([(ctfix.field.TestReqID, text)], session)
+        self.msg_type = Message.TYPES.Heartbeat
+
+
+class MarketDataRequestMessage(Message):
+    def __init__(self, request_id, symbol, unsubscribe=False, refresh=False, session=None):
+        super().__init__([
+            (ctfix.field.MDReqID, request_id),
+            (ctfix.field.SubscriptionRequestType, 2 if unsubscribe else 1),
+            (ctfix.field.MarketDepth, 0 if refresh else 1),
+            (ctfix.field.MDUpdateType, 1),
+            (ctfix.field.NoRelatedSym, 1),
+            (ctfix.field.Symbol, symbol),
+            (ctfix.field.NoMDEntryTypes, 2),
+            (ctfix.field.MDEntryType, 0),
+            (ctfix.field.MDEntryType, 1),
+        ], session)
+        self.msg_type = Message.TYPES.MarketDataRequest
+
+
+class CreateOrder(Message):
+    def __init__(self, order_id, symbol, side, size, session=None):
+        super().__init__([
+            (ctfix.field.ClOrdID, order_id),
+            (ctfix.field.Symbol, symbol),
+            (ctfix.field.Side, side),
+            (ctfix.field.TransactTime, self.get_time()),
+            (ctfix.field.OrderQty, size),
+            (ctfix.field.OrdType, 1),
+            (ctfix.field.TimeInForce, 3),
+        ], session)
+        self.msg_type = Message.TYPES.NewOrder
+
+
+class CreateLimitOrder(Message):
+    def __init__(self, order_id, symbol, side, size, price, expiry, session=None):
+        super().__init__([
+            (ctfix.field.ClOrdID, order_id),
+            (ctfix.field.Symbol, symbol),
+            (ctfix.field.Side, side),
+            (ctfix.field.TransactTime, self.get_time()),
+            (ctfix.field.OrderQty, size),
+            (ctfix.field.OrdType, 2),
+            (ctfix.field.Price, price),
+            (ctfix.field.TimeInForce, 6),
+            (ctfix.field.ExpireTime, expiry)
+        ], session)
+        self.msg_type = Message.TYPES.NewOrder

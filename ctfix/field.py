@@ -1,3 +1,4 @@
+SEPARATOR = chr(1)
 BeginString = 8
 BodyLength = 9
 MsgType = 35
