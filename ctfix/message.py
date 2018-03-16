@@ -1,5 +1,5 @@
-import Field
-import FIX44
+import ctfix.fix44
+import ctfix.field
 
 
 class Types:
@@ -27,7 +27,7 @@ def build_checksum(message: str):
 
 
 def make_pair(pair: tuple):
-    return str(pair[0]) + "=" + str(pair[1]) + FIX44.SOH
+    return str(pair[0]) + "=" + str(pair[1]) + ctfix.fix44.SOH
 
 
 class Base:
@@ -70,7 +70,7 @@ class Base:
                 return pair[1]
 
     def set_field(self, pair):
-        if str(pair[0]) == str(Field.MsgType):
+        if str(pair[0]) == str(ctfix.field.MsgType):
             self.msg_type = pair[1]
 
         self.fields.append(pair)
@@ -115,16 +115,16 @@ class Base:
 
     def build_header(self):
         header = [
-            (Field.MsgSeqNum, self.current_session.next_sequence_number()),
-            (Field.SenderCompID, self.current_session.sender_id),
-            (Field.SendingTime, FIX44.get_time()),
-            (Field.TargetCompID, self.current_session.target_id),
+            (ctfix.field.MsgSeqNum, self.current_session.next_sequence_number()),
+            (ctfix.field.SenderCompID, self.current_session.sender_id),
+            (ctfix.field.SendingTime, ctfix.fix44.get_time()),
+            (ctfix.field.TargetCompID, self.current_session.target_id),
         ]
 
         if self.current_session.target_sub is not None:
-            header.append((Field.TargetSubID, self.current_session.target_sub))
+            header.append((ctfix.field.TargetSubID, self.current_session.target_sub))
         if self.current_session.sender_sub is not None:
-            header.append((Field.SenderSubID, self.current_session.sender_sub))
+            header.append((ctfix.field.SenderSubID, self.current_session.sender_sub))
 
         return header
 
@@ -140,9 +140,9 @@ class Base:
 
         self.length += len(body)
 
-        msg_str = make_pair((Field.BeginString, FIX44.PROTOCOL))
-        msg_str += make_pair((Field.BodyLength, self.length))
-        msg_str += make_pair((Field.MsgType, self.msg_type))
+        msg_str = make_pair((ctfix.field.BeginString, ctfix.fix44.PROTOCOL))
+        msg_str += make_pair((ctfix.field.BodyLength, self.length))
+        msg_str += make_pair((ctfix.field.MsgType, self.msg_type))
         msg_str += body
         msg_str += build_checksum(msg_str)
 
@@ -150,8 +150,8 @@ class Base:
 
 
 def from_string(string, session=None) -> Base:
-    result = Base(None, session)
-    for pair in string.split(FIX44.SOH):
+    result = Base([], session)
+    for pair in string.split(ctfix.fix44.SOH):
         if len(pair):
             values = pair.split('=')
             if len(values) == 2:
