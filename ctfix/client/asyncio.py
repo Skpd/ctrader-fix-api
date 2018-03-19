@@ -8,6 +8,8 @@ from ctfix import field
 
 
 class Client:
+    TYPE_QUOTE = 'QUOTE'
+    TYPE_TRADE = 'TRADE'
     session = None
     writer = None
     reader = None
@@ -16,12 +18,14 @@ class Client:
     executor = None
     buffer = b''
     handlers = {}
+    client_type = None
 
-    def __init__(self, loop, username, password, broker=None, max_threads=None):
+    def __init__(self, loop, username, password, broker=None, max_threads=None, client_type=None):
+        self.client_type = self.TYPE_TRADE if client_type == self.TYPE_TRADE else self.TYPE_QUOTE
         self.session = Session(
             sender_id='{}.{}'.format(broker, username) if broker else username,
             target_id='CSERVER',
-            target_sub='QUOTE',
+            target_sub=client_type if client_type else self.TYPE_QUOTE,
             username=username,
             password=password
         )
@@ -30,9 +34,9 @@ class Client:
             max_workers=max_threads if max_threads else len(self.session.symbol_table)
         )
         logging.basicConfig(
-            format='%(asctime)s %(threadName)s %(levelname)s: %(message)s'
+            format='%(asctime)s %(threadName)s %(name)s %(levelname)s: %(message)s'
         )
-        self.logger = logging.getLogger('fix-client.' + self.session.sender_id)
+        self.logger = logging.getLogger('{} {}'.format(self.session.sender_id, self.client_type))
         self.handlers = {
             Message.TYPES.Logon: [self.on_logon],
             Message.TYPES.Heartbeat: [self.on_heartbeat],
