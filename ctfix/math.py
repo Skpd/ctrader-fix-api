@@ -1,3 +1,6 @@
+__all__ = ['calculate_commission', 'calculate_pip_value', 'calculate_spread']
+
+
 def calculate_spread(bid: str, ask: str, pip_position: int) -> int:
     spread = float(ask) - float(bid)
     spread = '{:.{}f}'.format(spread, pip_position + 1)

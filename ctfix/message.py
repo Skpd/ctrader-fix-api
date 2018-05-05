@@ -1,3 +1,8 @@
+__all__ = [
+    'Message', 'LogonMessage', 'HeartbeatMessage', 'TestResponseMessage',
+    'MarketDataRequestMessage', 'CreateOrder', 'CreateLimitOrder'
+]
+
 import datetime
 import ctfix.field
 
@@ -34,7 +39,7 @@ class Message:
             fields = []
 
         for pair in fields:
-            self.set_field(pair)
+            self.add_field(pair)
 
         self.length = None
         self.string = None
@@ -51,7 +56,7 @@ class Message:
         return self.get_field(item)
 
     def __setitem__(self, key, value):
-        return self.set_field((key, value))
+        return self.add_field((key, value))
 
     def get_type(self):
         return self.msg_type
@@ -61,13 +66,26 @@ class Message:
             if str(pair[0]) == str(field_type):
                 return pair[1]
 
-    def set_field(self, pair):
-        if str(pair[0]) == str(ctfix.field.MsgType):
-            self.msg_type = pair[1]
+    def add_field(self, pair_or_first, second=None):
+        if not second and len(pair_or_first) != 2:
+            raise TypeError('set_field accepts either valid pair or two arguments')
+        elif not second:
+            first = pair_or_first[0]
+            second = pair_or_first[1]
+        else:
+            first = pair_or_first
 
-        self.fields.append(pair)
+        # add field to the field list
+        self.fields.append((first, second))
+
+        # set message type if field is a message type
+        if str(first) == str(ctfix.field.MsgType):
+            self.msg_type = second
+
+        # drop compiled message cache
         self.length = None
         self.string = None
+
         return self
 
     def get_all_by(self, field_type):
@@ -130,7 +148,7 @@ class Message:
         for pair in self.fields:
             body += Message.make_pair(pair)
 
-        self.length += len(body)
+        self.length += len(body) + 1
 
         msg_str = self.make_pair((ctfix.field.BeginString, Message.PROTOCOL))
         msg_str += self.make_pair((ctfix.field.BodyLength, self.length))
@@ -163,19 +181,19 @@ class Message:
             if len(pair):
                 values = pair.split('=')
                 if len(values) == 2:
-                    result.set_field((values[0], values[1]))
+                    result.add_field((values[0], values[1]))
         result.string = string
         return result
 
 
 class LogonMessage(Message):
-    def __init__(self, username, password, heartbeat=3, session=None):
+    def __init__(self, username, password, heartbeat=30, session=None):
         super().__init__([
+            (ctfix.field.Username, username),
+            (ctfix.field.Password, password),
             (ctfix.field.EncryptMethod, 0),
             (ctfix.field.HeartBtInt, heartbeat),
             (ctfix.field.ResetSeqNum, 'Y'),
-            (ctfix.field.Username, username),
-            (ctfix.field.Password, password)
         ], session)
         self.msg_type = Message.TYPES.Logon
 
@@ -198,7 +216,7 @@ class MarketDataRequestMessage(Message):
             (ctfix.field.MDReqID, request_id),
             (ctfix.field.SubscriptionRequestType, 2 if unsubscribe else 1),
             (ctfix.field.MarketDepth, 0 if refresh else 1),
-            (ctfix.field.MDUpdateType, 1),
+            (ctfix.field.MDUpdateType, 0),
             (ctfix.field.NoRelatedSym, 1),
             (ctfix.field.Symbol, symbol),
             (ctfix.field.NoMDEntryTypes, 2),
@@ -209,11 +227,12 @@ class MarketDataRequestMessage(Message):
 
 
 class CreateOrder(Message):
-    def __init__(self, order_id, symbol, side, size, session=None):
+    def __init__(self, order_id, symbol, side, size, price, session=None):
         super().__init__([
             (ctfix.field.ClOrdID, order_id),
             (ctfix.field.Symbol, symbol),
             (ctfix.field.Side, side),
+            (ctfix.field.Price, price),
             (ctfix.field.TransactTime, self.get_time()),
             (ctfix.field.OrderQty, size),
             (ctfix.field.OrdType, 1),

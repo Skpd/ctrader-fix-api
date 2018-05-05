@@ -7,3 +7,5 @@ ctfix.egg-info
 
 *.log
 main.py
+
+.pytest_cache

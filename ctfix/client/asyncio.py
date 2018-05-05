@@ -2,9 +2,9 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from ctfix.session import Session
-from ctfix.message import Message, LogonMessage, HeartbeatMessage, TestResponseMessage, MarketDataRequestMessage
-from ctfix.math import calculate_spread
-from ctfix import field
+from ctfix.message import *
+from ctfix.math import *
+from ctfix.field import *
 
 
 class Client:
@@ -20,15 +20,9 @@ class Client:
     handlers = {}
     client_type = None
 
-    def __init__(self, loop, username, password, broker=None, max_threads=None, client_type=None):
+    def __init__(self, loop, session: Session, max_threads=None, client_type=None):
         self.client_type = self.TYPE_TRADE if client_type == self.TYPE_TRADE else self.TYPE_QUOTE
-        self.session = Session(
-            sender_id='{}.{}'.format(broker, username) if broker else username,
-            target_id='CSERVER',
-            target_sub=client_type if client_type else self.TYPE_QUOTE,
-            username=username,
-            password=password
-        )
+        self.session = session
         self.loop = loop
         self.executor = ThreadPoolExecutor(
             max_workers=max_threads if max_threads else len(self.session.symbol_table)
@@ -55,39 +49,39 @@ class Client:
 
     def on_connect(self):
         self.logger.info('Connected')
-        self.write(LogonMessage(self.session.username, self.session.password, 3, self.session))
+        self.write(LogonMessage(self.session.username, self.session.password, 30, self.session))
 
-    def on_logon(self, msg: Message):
+    def on_logon(self):
         self.logger.critical('Signed in as {}'.format(self.session.sender_id))
 
     def on_test(self, msg: Message):
-        self.write(TestResponseMessage(msg.get_field(field.TestReqID), self.session))
+        self.write(TestResponseMessage(msg.get_field(TestReqID), self.session))
 
-    def on_heartbeat(self, msg: Message):
+    def on_heartbeat(self):
         self.write(HeartbeatMessage(self.session))
 
     def on_market_data(self, msg: Message):
-        prices = msg.get_group(field.Groups.MDEntry_Snapshot)
+        prices = msg.get_group(Groups.MDEntry_Snapshot)
 
-        if len(prices) < 2 or field.MDEntryPx not in prices[0] or field.MDEntryPx not in prices[1]:
+        if len(prices) < 2 or MDEntryPx not in prices[0] or MDEntryPx not in prices[1]:
             self.logger.error("No ask or bid in price update.")
             return
 
-        ask_idx = 1 if prices[0][field.MDEntryType] == '0' else 0
+        ask_idx = 1 if prices[0][MDEntryType] == '0' else 0
         bid_idx = (ask_idx + 1) % 2
         spread = calculate_spread(
-            prices[bid_idx][field.MDEntryPx],
-            prices[ask_idx][field.MDEntryPx],
-            self.session.symbol_table[int(msg.get_field(field.Symbol))]['pip_position']
+            prices[bid_idx][MDEntryPx],
+            prices[ask_idx][MDEntryPx],
+            self.session.symbol_table[int(msg.get_field(Symbol))]['pip_position']
         )
-        name = self.session.symbol_table[int(msg.get_field(field.Symbol))]['name']
+        name = self.session.symbol_table[int(msg.get_field(Symbol))]['name']
 
         self.logger.info("\t{0: <10}\tSPREAD: {1}\tBID: {2: <10}\tASK: {3: <10}".format(
-            name, spread, prices[bid_idx][field.MDEntryPx], prices[ask_idx][field.MDEntryPx],
+            name, spread, prices[bid_idx][MDEntryPx], prices[ask_idx][MDEntryPx],
         ))
 
     def process(self, buffer):
-        self.logger.debug('<<< IN {}'.format(buffer.decode().split(field.SEPARATOR)))
+        self.logger.debug('<<< IN {}'.format(buffer.decode().split(SEPARATOR)))
 
         msg = Message.from_string(buffer.decode(), self.session)
 
@@ -113,17 +107,25 @@ class Client:
             self.buffer = b''
 
     def write(self, msg: Message):
-        self.logger.debug('>>> OUT {}'.format(bytes(msg)))
+        self.logger.debug('>>> OUT {}'.format(bytes(msg).replace(b'\x01', b'|')))
         self.loop.call_soon_threadsafe(self.writer.write, bytes(msg))
 
     async def run(self, host, port):
         await self.connect(host, port)
 
-        while self.loop.is_running():
+        max_attempts = 2
+        attempts = max_attempts
+
+        while attempts and self.loop.is_running():
             try:
-                data = await self.reader.readuntil(bytes(field.SEPARATOR, 'ASCII'))
+                data = await self.reader.readuntil(bytes(SEPARATOR, 'ASCII'))
                 self.feed(data)
+                attempts = max_attempts
             except asyncio.streams.IncompleteReadError:
                 self.logger.critical('!Disconnected!')
                 self.logger.info('Trying to reconnect')
+                attempts -= 1
                 await self.connect(host, port)
+
+        self.logger.critical('Giving up after {} attempts'.format(max_attempts))
+        self.loop.stop()

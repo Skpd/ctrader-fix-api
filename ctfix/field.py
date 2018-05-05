@@ -52,6 +52,7 @@ CumQty = 14
 OrdRejReason = 103
 BuySide = 1
 SellSide = 2
+Account = 1
 
 
 class Groups:
